@@ -341,6 +341,7 @@ class StructureMatcher(MSONable):
         angle_tol=5,
         primitive_cell=True,
         scale=True,
+        scale_area = False,
         attempt_supercell=False,
         allow_subset=False,
         comparator=None,
@@ -358,6 +359,9 @@ class StructureMatcher(MSONable):
                 primitive cells prior to matching. Default to True.
             scale (bool): Input structures are scaled to equivalent volume if
                true; For exact matching, set to False.
+            scale_area (bool): Input structures are scaled to equivalent area 
+                spanned by the lattice vector 1 and 2 if true. Usefull for 
+                2D materials; For exact matching, set to False.
             attempt_supercell (bool): If set to True and number of sites in
                 cells differ after a primitive cell reduction (divisible by an
                 integer) attempts to generate a supercell transformation of the
@@ -396,6 +400,7 @@ class StructureMatcher(MSONable):
         self._comparator = comparator or SpeciesComparator()
         self._primitive_cell = primitive_cell
         self._scale = scale
+        self._scale_area = scale_area
         self._supercell = attempt_supercell
         self._supercell_size = supercell_size
         self._subset = allow_subset
@@ -683,6 +688,15 @@ class StructureMatcher(MSONable):
         # rescale lattice to same volume
         if self._scale:
             ratio = (struct2.volume / (struct1.volume * mult)) ** (1 / 6)
+            nl1 = Lattice(struct1.lattice.matrix * ratio)
+            struct1.lattice = nl1
+            nl2 = Lattice(struct2.lattice.matrix / ratio)
+            struct2.lattice = nl2
+
+        # rescale lattice to same area spanned by the lattice vectors 1 and 2. Usefull for 2D materials
+        # where the out of plane lattice is ill defined
+        if self._scale_area:
+            ratio = (struct2.area / (struct1.area * mult)) ** (1 / 4)
             nl1 = Lattice(struct1.lattice.matrix * ratio)
             struct1.lattice = nl1
             nl2 = Lattice(struct2.lattice.matrix / ratio)

@@ -462,6 +462,15 @@ class Lattice(MSONable):
         return float(abs(dot(np.cross(m[0], m[1]), m[2])))
 
     @property
+    def area(self) -> float:
+        """
+        Area spanned by the first two lattice vectors
+        of the unit cell.
+        """
+        m = self._matrix
+        return float(abs(np.cross(m[0], m[1])))
+
+    @property
     def parameters(self) -> tuple[float, float, float, float, float, float]:
         """
         Returns: (a, b, c, alpha, beta, gamma).

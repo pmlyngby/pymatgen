@@ -1125,6 +1125,14 @@ class IStructure(SiteCollection, MSONable):
         """
         return self._lattice.volume
 
+    @property
+    def area(self) -> float:
+        """
+        Returns the area of the structure spanned by the first two
+        lattice vectors.
+        """
+        return self._lattice.area
+
     def get_distance(self, i: int, j: int, jimage=None) -> float:
         """
         Get distance between site i and j assuming periodic boundary

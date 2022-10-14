@@ -696,6 +696,8 @@ class StructureMatcher(MSONable):
         # rescale lattice to same area spanned by the lattice vectors 1 and 2. Usefull for 2D materials
         # where the out of plane lattice is ill defined
         if self._scale_area:
+            if self._scale:
+                raise ValueError("Both scale and scale_area are True! This will not work!")
             ratio = (struct2.area / (struct1.area * mult)) ** (1 / 4)
             nl1 = Lattice(struct1.lattice.matrix * ratio)
             struct1.lattice = nl1

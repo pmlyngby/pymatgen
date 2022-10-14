@@ -663,6 +663,15 @@ class StructureMatcher(MSONable):
             copied_structures.append(ss)
         return copied_structures
 
+    def _hack_c_lattice_vector(self, struc):
+        from pymatgen.io.ase import AseAtomsAdaptor
+        """ Ugly way to change c lattice vector to a fixed size without moving atoms"""
+        atom = AseAtomsAdaptor.get_atoms(struc)
+        cell = atom.get_cell()
+        atom.set_cell([cell[0], cell[1], [0,0,40]])
+        return AseAtomsAdaptor.get_structure(atom)
+
+
     def _preprocess(self, struct1, struct2, niggli=True, skip_structure_reduction: bool = False):
         """
         Rescales, finds the reduced structures (primitive and niggli),
@@ -703,6 +712,9 @@ class StructureMatcher(MSONable):
             struct1.lattice = nl1
             nl2 = Lattice(struct2.lattice.matrix / ratio)
             struct2.lattice = nl2
+            
+            struct1 = self._hack_c_lattice_vector(struct1)
+            struct2 = self._hack_c_lattice_vector(struct2)
 
         return struct1, struct2, fu, s1_supercell
 

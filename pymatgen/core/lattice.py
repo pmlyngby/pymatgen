@@ -468,7 +468,7 @@ class Lattice(MSONable):
         of the unit cell.
         """
         m = self._matrix
-        return float(abs(np.cross(m[0], m[1])))
+        return float(np.linalg.norm(np.cross(m[0], m[1])))
 
     @property
     def parameters(self) -> tuple[float, float, float, float, float, float]:

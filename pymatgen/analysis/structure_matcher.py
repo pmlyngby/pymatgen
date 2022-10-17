@@ -878,6 +878,67 @@ class StructureMatcher(MSONable):
 
         return all_groups
 
+    def group_structures_2D(self, s_list, anonymous=False):
+        """
+        Given a list of structures, use fit to group
+        them by structural equality.
+
+        Args:
+            s_list ([Structure]): List of structures to be grouped
+            anonymous (bool): Whether to use anonymous mode.
+
+        Returns:
+            A list of lists of matched structures
+            Assumption: if s1 == s2 but s1 != s3, than s2 and s3 will be put
+            in different groups without comparison.
+        """
+        if self._subset:
+            raise ValueError("allow_subset cannot be used with group_structures")
+
+        original_s_list = list(s_list)
+        s_list = self._process_species(s_list)
+        # Prepare reduced structures beforehand
+        s_list = [self._get_reduced_structure(s, self._primitive_cell, niggli=True) for s in s_list]
+
+        # Use structure hash to pre-group structures
+        if anonymous:
+
+            def c_hash(c):
+                return c.anonymized_formula
+
+        else:
+            c_hash = self._comparator.get_hash
+
+        def s_hash(s):
+            return c_hash(s[1].composition)
+
+        sorted_s_list = sorted(enumerate(s_list), key=s_hash)
+        all_groups = []
+
+        # For each pre-grouped list of structures, perform actual matching.
+        for _, g in itertools.groupby(sorted_s_list, key=s_hash):
+            unmatched = list(g)
+            while len(unmatched) > 0:
+                i, refs = unmatched.pop(0)
+                matches = [i]
+                if anonymous:
+                    inds = filter(
+                        lambda i: self.fit_anonymous_2D(refs, unmatched[i][1], skip_structure_reduction=True),
+                        list(range(len(unmatched))),
+                    )
+                else:
+                    inds = filter(
+                        lambda i: self.fit(refs, unmatched[i][1], skip_structure_reduction=True),
+                        list(range(len(unmatched))),
+                    )
+                inds = list(inds)
+                matches.extend([unmatched[i][0] for i in inds])
+                unmatched = [unmatched[i] for i in range(len(unmatched)) if i not in inds]
+                all_groups.append([original_s_list[i] for i in matches])
+
+        return all_groups
+
+
     def as_dict(self):
         """
         :return: MSONable dict
@@ -1093,6 +1154,72 @@ class StructureMatcher(MSONable):
         Returns:
             True/False: Whether a species mapping can map struct1 to stuct2
         """
+        struct1, struct2 = self._process_species([struct1, struct2])
+        struct1, struct2, fu, s1_supercell = self._preprocess(struct1, struct2, niggli, skip_structure_reduction)
+
+        matches = self._anonymous_match(struct1, struct2, fu, s1_supercell, break_on_match=True, single_match=True)
+
+        return bool(matches)
+
+
+
+    def fit_anonymous_2D(
+        self, struct1: Structure, struct2: Structure, niggli: bool = True, skip_structure_reduction: bool = False
+    ):
+        """
+        Performs an anonymous fitting, which allows distinct species in one
+        structure to map to another. E.g., to compare if the Li2O and Na2O
+        structures are similar.
+
+        Args:
+            struct1 (Structure): 1st structure
+            struct2 (Structure): 2nd structure
+            niggli (Bool): If true, perform Niggli reduction for struct1 and struct2
+            skip_structure_reduction (Bool): Defaults to False
+                If True, skip to get a primitive structure and perform Niggli reduction for struct1 and struct2
+
+        Returns:
+            True/False: Whether a species mapping can map struct1 to stuct2
+        """
+        def normalize_nonpbc_atoms(atoms1, atoms2):
+            atoms1, atoms2 = atoms1.copy(), atoms2.copy()
+
+            pbc1_c = atoms1.get_pbc()
+            pbc2_c = atoms2.get_pbc()
+
+            assert all(pbc1_c == pbc2_c)
+
+            if not all(pbc1_c):
+                cell1_cv = atoms1.get_cell()
+                n1_c = (cell1_cv**2).sum(1)**0.5
+                cell2_cv = atoms2.get_cell()
+                n2_c = (cell2_cv**2).sum(1)**0.5
+                cell2_cv[~pbc2_c] *= (n1_c / n2_c)[~pbc2_c, np.newaxis]
+                atoms2.set_cell(cell2_cv)
+
+            return atoms1, atoms2
+
+        from pymatgen.io.ase import AseAtomsAdaptor
+        from ase.build import niggli_reduce
+        
+        adaptor = AseAtomsAdaptor()
+        atoms1 = adaptor.get_atoms(struct1)
+        atoms2 = adaptor.get_atoms(struct2)
+        atoms1.set_pbc((True, True, False))
+        atoms2.set_pbc((True, True, False))
+
+        atoms1, atoms2 = normalize_nonpbc_atoms(atoms1, atoms2)
+
+        atoms1 = atoms1.copy()
+        atoms2 = atoms2.copy()
+        atoms1.set_pbc(True)
+        atoms2.set_pbc(True)
+        niggli_reduce(atoms1)
+        niggli_reduce(atoms2)
+        struct1 = adaptor.get_structure(atoms1)
+        struct2 = adaptor.get_structure(atoms2)
+
+
         struct1, struct2 = self._process_species([struct1, struct2])
         struct1, struct2, fu, s1_supercell = self._preprocess(struct1, struct2, niggli, skip_structure_reduction)
 
